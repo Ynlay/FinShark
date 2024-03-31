@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using api.Data;
 using api.DTOs.Stock;
+using api.Interfaces;
 using api.Mappers;
 using api.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -16,15 +17,17 @@ namespace api.Controllers
     public class StockController : ControllerBase
     {
         readonly ApplicationDBContext _context;
-        public StockController(ApplicationDBContext context)
+        readonly IStockRepository _stockRepo;
+        public StockController(ApplicationDBContext context, IStockRepository stockRepo)
         {
             _context = context;
+            _stockRepo = stockRepo;
         }
 
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var stocks = await _context.Stocks.ToListAsync();
+            var stocks = await _stockRepo.GetAllAsync();
             var stockDTO = stocks.Select(stock => stock.ToStockDTO());
 
             return Ok(stocks);
@@ -33,7 +36,7 @@ namespace api.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById([FromRoute] int id)
         {
-            var stock = await _context.Stocks.FindAsync(id);
+            var stock = await _stockRepo.GetByIdAsync(id);
 
             if (stock == null)
             {
@@ -47,8 +50,7 @@ namespace api.Controllers
         public async Task<IActionResult> Create([FromBody] CreateStockRequestDTO stockDTO)
         {
             var stockModel = stockDTO.ToStockFromCreateDTO();
-            await _context.Stocks.AddAsync(stockModel);
-            await _context.SaveChangesAsync();
+            await _stockRepo.CreateAsync(stockModel);
 
             return CreatedAtAction(nameof(GetById), new { id = stockModel.Id }, stockModel.ToStockDTO());
         }
@@ -57,21 +59,14 @@ namespace api.Controllers
         [Route("{id}")]
         public async Task<IActionResult> Update([FromRoute] int id, [FromBody] UpdateStockRequestDTO updateDTO)
         {
-            var stockModel = await _context.Stocks.FirstOrDefaultAsync(x => x.Id == id);
+            var stockModel = await _stockRepo.UpdateAsync(id, updateDTO);
 
             if (stockModel == null)
             {
                 return NotFound();
             }
 
-            stockModel.Symbol = updateDTO.Symbol;
-            stockModel.CompanyName = updateDTO.CompanyName;
-            stockModel.Purchase = updateDTO.Purchase;
-            stockModel.LastDiv = updateDTO.LastDiv;
-            stockModel.Industry = updateDTO.Industry;
-            stockModel.MarketCap = updateDTO.MarketCap;
-
-            await _context.SaveChangesAsync();
+            
 
             return Ok(stockModel.ToStockDTO());
         }
@@ -80,19 +75,12 @@ namespace api.Controllers
         [Route("{id}")]
         public async Task<IActionResult> Delete([FromRoute] int id)
         {
-            var stockModel = await _context.Stocks.FirstOrDefaultAsync(x => x.Id == id);
+            var stockModel = await _stockRepo.DeleteAsync(id);
 
             if (stockModel == null)
             {
                 return NotFound();
             }
-
-            // Remove is not an asynchronous operation
-            // Reason Why:  
-            // - It does not involve any immediate database interaction when called, merely a state change in memory
-            // - does not involve waiting and is a quick in-memory operation, making it asynchronous would not provide any benefits and could even lead to less efficient resource utilization.
-            _context.Stocks.Remove(stockModel);
-            await _context.SaveChangesAsync();
 
             return NoContent();
         }
